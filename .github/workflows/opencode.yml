@@ -31,4 +31,4 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           model: anthropic/claude-sonnet-4-20250514
-          token: ${{ secrets.GITHUB_TOKEN }}
+          use_github_token: true
