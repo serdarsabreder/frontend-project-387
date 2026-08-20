@@ -1,0 +1,65 @@
+name: Nightly Checks
+
+on:
+  schedule:
+    - cron: "0 3 * * *"  # 3 AM UTC daily
+  workflow_dispatch:
+
+jobs:
+  api-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+      - name: Install dependencies
+        run: npm ci
+        working-directory: server
+      - name: Run API tests
+        run: npm test
+        working-directory: server
+
+  client-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: client/package-lock.json
+      - name: Install dependencies
+        run: npm ci
+        working-directory: client
+      - name: Typecheck
+        run: npm run typecheck
+        working-directory: client
+      - name: Build
+        run: npm run build
+        working-directory: client
+
+  lighthouse:
+    runs-on: ubuntu-latest
+    needs: [client-build]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install Lighthouse CI
+        run: npm install -g @lhci/cli
+      - name: Build client
+        run: npm ci && npm run build
+        working-directory: client
+      - name: Run Lighthouse audit
+        run: |
+          lhci autorun \
+            --collect.url="http://localhost:3000" \
+            --collect.staticDistDir="./client/dist" \
+            --assert.preset="lighthouse:recommended" \
+            --upload.target="temporary-public-storage" || true
+        env:
+          LHCI_GITHUB_APP_TOKEN: ${{ secrets.LHCI_GITHUB_APP_TOKEN }}

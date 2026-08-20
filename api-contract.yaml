@@ -1,0 +1,365 @@
+openapi: 3.0.0
+info:
+  title: Call Booking
+  description: |-
+    Design First contract for the Call Booking service, a Cal.com-style time-booking
+    application. This TypeSpec file is the single source of truth; the OpenAPI
+    specification (api-contract.yaml) is generated from it.
+
+    Roles (no registration or authorization):
+    - calendar owner — a single predefined profile, used by default in the admin part.
+    - guest — books slots without creating an account.
+
+    Booking rules:
+    - Available slots are generated for the next 14 days starting from today
+      (the booking window), on a 30-minute grid within business hours 09:00–18:00 UTC.
+    - A slot's duration comes from its event type.
+    - Occupancy is global: two bookings cannot overlap in time, even when they are
+      for different event types. A booking attempt that overlaps an existing booking
+      is rejected with 409 Conflict.
+  version: 1.0.0
+tags: []
+paths:
+  /bookings:
+    get:
+      operationId: BookingsResource_list
+      description: List upcoming meetings across all event types, ordered by start time.
+      parameters: []
+      responses:
+        '200':
+          description: The request has succeeded.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Booking'
+    post:
+      operationId: BookingsResource_create
+      description: |-
+        Book a free slot for a guest.
+
+        The slot interval is derived from the event type duration. The booking is
+        rejected with 409 Conflict when any existing booking overlaps that interval
+        (the occupancy rule applies across event types).
+      parameters: []
+      responses:
+        '201':
+          description: The request has succeeded and a new resource has been created as a result.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Booking'
+        '400':
+          description: The server could not understand the request due to invalid syntax.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: The server cannot find the requested resource.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: The request conflicts with the current state of the server.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateBookingRequest'
+  /event-types:
+    get:
+      operationId: EventTypesResource_list
+      description: List all published event types (id, name, description, duration).
+      parameters: []
+      responses:
+        '200':
+          description: The request has succeeded.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/EventType'
+    post:
+      operationId: EventTypesResource_create
+      description: Create a new event type. Owner-only action (no auth in this project).
+      parameters: []
+      responses:
+        '201':
+          description: The request has succeeded and a new resource has been created as a result.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventType'
+        '400':
+          description: The server could not understand the request due to invalid syntax.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateEventTypeRequest'
+  /owner:
+    get:
+      operationId: OwnerResource_get
+      description: Return the default calendar owner profile.
+      parameters: []
+      responses:
+        '200':
+          description: The request has succeeded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Owner'
+  /slots:
+    get:
+      operationId: SlotsResource_list
+      description: |-
+        List the slots for an event type.
+
+        Slots are generated for the next 14 days (booking window) on a 30-minute grid
+        within business hours 09:00–18:00 UTC. A slot is marked `booked` when an
+        existing booking overlaps its interval, across all event types. Pass `date` to
+        restrict the response to a single day (YYYY-MM-DD); otherwise the whole
+        window is returned.
+      parameters:
+        - name: eventTypeId
+          in: query
+          required: true
+          description: The event type to generate slots for.
+          schema:
+            type: string
+          explode: false
+        - name: date
+          in: query
+          required: false
+          description: Optional single day (YYYY-MM-DD) to filter on.
+          schema:
+            type: string
+            format: date
+          explode: false
+      responses:
+        '200':
+          description: The request has succeeded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SlotsResponse'
+        '400':
+          description: The server could not understand the request due to invalid syntax.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: The server cannot find the requested resource.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+components:
+  schemas:
+    Booking:
+      type: object
+      required:
+        - id
+        - eventTypeId
+        - slotId
+        - start
+        - end
+        - name
+        - createdAt
+      properties:
+        id:
+          type: string
+          description: Unique identifier of the booking.
+        eventTypeId:
+          type: string
+          description: The event type that was booked.
+        slotId:
+          type: string
+          description: The id of the booked slot (its UTC start time).
+        start:
+          type: string
+          format: date-time
+          description: Start of the meeting in ISO 8601 (UTC).
+        end:
+          type: string
+          format: date-time
+          description: End of the meeting in ISO 8601 (UTC).
+        name:
+          type: string
+          description: Name of the guest who booked.
+        email:
+          type: string
+          format: email
+          description: Optional guest email for follow-up.
+        createdAt:
+          type: string
+          format: date-time
+          description: When the booking was created in ISO 8601 (UTC).
+      description: A booking links a guest to a slot interval for an event type.
+    CreateBookingRequest:
+      type: object
+      required:
+        - eventTypeId
+        - slotId
+        - name
+      properties:
+        eventTypeId:
+          type: string
+          description: The event type the guest selected.
+        slotId:
+          type: string
+          description: The id of the free slot to book, as returned by GET /slots.
+        name:
+          type: string
+          minLength: 1
+          description: Name of the guest booking the call.
+        email:
+          type: string
+          format: email
+          description: Optional guest email for follow-up.
+      description: Payload for booking a slot (guest action).
+    CreateEventTypeRequest:
+      type: object
+      required:
+        - name
+        - durationMinutes
+      properties:
+        name:
+          type: string
+          minLength: 1
+          description: Short name shown to guests, e.g. "Intro call".
+        description:
+          type: string
+          description: Longer description shown on the booking types page.
+        durationMinutes:
+          type: integer
+          format: int32
+          minimum: 1
+          maximum: 480
+          description: Meeting length in minutes; must be a positive integer.
+      description: Payload for creating an event type (owner action).
+    Error:
+      type: object
+      required:
+        - error
+      properties:
+        error:
+          type: string
+          description: Human-readable description of what went wrong.
+      description: Standard error envelope returned by every non-2xx response.
+    EventType:
+      type: object
+      required:
+        - id
+        - name
+        - durationMinutes
+      properties:
+        id:
+          type: string
+          description: Unique identifier of the event type.
+        name:
+          type: string
+          description: Short name shown to guests, e.g. "Intro call".
+        description:
+          type: string
+          description: Longer description shown on the booking types page.
+        durationMinutes:
+          type: integer
+          format: int32
+          description: Meeting length in minutes; determines the end of every generated slot.
+      description: A meeting shape published by the owner, with a fixed duration in minutes.
+    Owner:
+      type: object
+      required:
+        - id
+        - name
+      properties:
+        id:
+          type: string
+          description: Stable identifier of the owner profile.
+        name:
+          type: string
+          description: Display name shown in the admin part.
+      description: The single predefined calendar owner profile used by the admin part.
+    Slot:
+      type: object
+      required:
+        - id
+        - eventTypeId
+        - date
+        - start
+        - end
+        - status
+      properties:
+        id:
+          type: string
+          description: Stable identifier, derived from the slot's UTC start time.
+        eventTypeId:
+          type: string
+          description: The event type this slot belongs to.
+        date:
+          type: string
+          format: date
+          description: The calendar day in YYYY-MM-DD (UTC).
+        start:
+          type: string
+          format: date-time
+          description: Start of the slot in ISO 8601 (UTC).
+        end:
+          type: string
+          format: date-time
+          description: End of the slot in ISO 8601 (UTC), start + event type duration.
+        status:
+          allOf:
+            - $ref: '#/components/schemas/SlotStatus'
+          description: Whether the slot is still free to book.
+      description: A single bookable time slot for an event type inside the 14-day window.
+    SlotStatus:
+      type: string
+      enum:
+        - available
+        - booked
+      description: Availability state of a generated slot.
+    SlotsResponse:
+      type: object
+      required:
+        - eventTypeId
+        - slots
+      properties:
+        eventTypeId:
+          type: string
+          description: The event type the slots were generated for.
+        date:
+          type: string
+          format: date
+          description: The requested date, when a single day was asked for.
+        slots:
+          type: array
+          items:
+            $ref: '#/components/schemas/Slot'
+          description: Slots, ordered by start time.
+      description: The response of the slot listing endpoint.
+    Versions:
+      type: string
+      enum:
+        - 1.0.0
+      description: API versions of the Call Booking contract.
+servers:
+  - url: /api
+    description: The Call Booking API is mounted under the /api prefix.
+    variables: {}

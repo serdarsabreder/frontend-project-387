@@ -1,0 +1,9 @@
+node_modules/
+client/dist/
+data/
+*.log
+.env
+.DS_Store
+e2e/test-results/
+e2e/playwright-report/
+e2e/blob-report/

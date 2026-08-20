@@ -1,0 +1,23 @@
+name: Release
+
+# release-please reads Conventional Commits pushed to main and maintains a
+# release PR: it generates CHANGELOG.md and suggests a semver version bump
+# (feat: -> minor, fix: -> patch, BREAKING CHANGE -> major).
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  release-please:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: googleapis/release-please-action@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          release-type: simple
