@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { CalendarX2, Clock, Globe, Lock, Video } from 'lucide-react';
+import { CalendarX2, Clock, Globe, Loader2, Lock, Video } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -195,7 +195,10 @@ export default function BookingPage({ eventType, owner, onBack }: BookingPagePro
         <Separator className="my-6" />
 
         {loading ? (
-          <p className="text-muted-foreground">Loading available times…</p>
+          <div className="flex items-center justify-center gap-2 py-10 text-muted-foreground" aria-live="polite" aria-busy="true">
+            <Loader2 className="size-5 animate-spin text-primary" />
+            <span className="text-sm font-medium">Loading available times…</span>
+          </div>
         ) : !selected ? (
           <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed py-10 text-center">
             <CalendarX2 className="size-8 text-muted-foreground/50" />
