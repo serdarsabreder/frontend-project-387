@@ -89,3 +89,44 @@ test('owner can create an event type', async ({ page }) => {
   await page.getByRole('button', { name: 'Book a call' }).click();
   await expect(page.getByRole('button', { name: /Quick Check-in/ })).toBeVisible();
 });
+
+test.describe('calendar date selection', () => {
+  // A far-from-UTC guest clock: day cells must stay keyed to the server's
+  // UTC dates and clicking one must refetch that exact date's slots.
+  test.use({ timezoneId: 'Asia/Tokyo' });
+
+  test('clicking a date fetches and shows that day’s availability', async ({ page }) => {
+    await page.goto('/');
+    await page.getByRole('button', { name: /30 Min Meeting/ }).click();
+
+    const firstFreeSlot = page.locator('button:not([disabled])[data-testid]').first();
+    await expect(firstFreeSlot).toBeVisible();
+
+    // Choose a not-yet-selected day in the calendar grid.
+    const unselected = page.locator('button[aria-pressed="false"]').first();
+    await expect(unselected).toBeVisible();
+    const targetId = await unselected.getAttribute('id');
+    expect(targetId).toMatch(/^day-\d{4}-\d{2}-\d{2}$/);
+    const expectedDate = targetId!.replace(/^day-/, '');
+    const target = page.locator(`#${targetId}`);
+
+    // Clicking must issue GET /api/slots?eventTypeId=…&date=<clicked day>.
+    const [slotsResponse] = await Promise.all([
+      page.waitForResponse((res) => res.url().includes('/api/slots') && res.url().includes(`date=${expectedDate}`)),
+      target.click(),
+    ]);
+    expect(slotsResponse.ok()).toBeTruthy();
+
+    // The selection moves to the clicked day.
+    await expect(target).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.getByTestId('selected-day-number')).toHaveText(expectedDate.slice(-2));
+
+    // The rendered time list matches the server's availability for that date.
+    const apiRes = await page.request.get(`/api/slots?eventTypeId=1&date=${expectedDate}`);
+    expect(apiRes.ok()).toBeTruthy();
+    const { slots } = (await apiRes.json()) as { slots: { status: string }[] };
+    await expect(page.locator('button[data-testid]')).toHaveCount(slots.length);
+    const bookedCount = slots.filter((s) => s.status === 'booked').length;
+    await expect(page.locator('button[data-testid][disabled]')).toHaveCount(bookedCount);
+  });
+});
