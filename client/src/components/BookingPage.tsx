@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Clock, Globe, Lock, Video } from 'lucide-react';
+import { CalendarX2, Clock, Globe, Lock, Video } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -197,7 +197,15 @@ export default function BookingPage({ eventType, owner, onBack }: BookingPagePro
         {loading ? (
           <p className="text-muted-foreground">Loading available times…</p>
         ) : !selected ? (
-          <p className="text-muted-foreground">No available slots in the next 14 days.</p>
+          <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed py-10 text-center">
+            <CalendarX2 className="size-8 text-muted-foreground/50" />
+            <div className="flex flex-col gap-1">
+              <p className="font-semibold">Fully booked for now</p>
+              <p className="text-sm text-muted-foreground">
+                {owner.name} has no open times in the next 14 days. Please check back soon!
+              </p>
+            </div>
+          </div>
         ) : (
           <div className="flex gap-6">
             <div className="flex w-24 shrink-0 flex-col gap-2 pt-2">
@@ -231,7 +239,13 @@ export default function BookingPage({ eventType, owner, onBack }: BookingPagePro
                   </button>
                 );
               })}
-              {selected.daySlots.length === 0 && <p className="text-muted-foreground">No times available on this day.</p>}
+              {selected.daySlots.length === 0 && (
+                <div className="flex flex-col items-center gap-2 rounded-xl border border-dashed py-8 text-center">
+                  <CalendarX2 className="size-6 text-muted-foreground/50" />
+                  <p className="font-medium">All times are taken on this day</p>
+                  <p className="text-sm text-muted-foreground">Try picking another date from the calendar.</p>
+                </div>
+              )}
             </div>
           </div>
         )}
