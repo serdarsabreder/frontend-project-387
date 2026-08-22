@@ -4,6 +4,14 @@ export function localDateString(d: Date): string {
   return `${d.getFullYear()}-${month}-${day}`;
 }
 
+// The server keys slots by their UTC calendar date (`slot.date`), so the
+// calendar must use UTC keys too — otherwise ?date= requests would not line up.
+export function utcDateString(d: Date): string {
+  const month = String(d.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(d.getUTCDate()).padStart(2, '0');
+  return `${d.getUTCFullYear()}-${month}-${day}`;
+}
+
 export function formatTime(iso: string): string {
   return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }

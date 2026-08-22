@@ -72,6 +72,29 @@ test('booking the same slot twice returns 409', async ({ request }) => {
   expect(body.error).toBe('This time slot is already reserved.');
 });
 
+test('shows an empty state when the API returns no slots', async ({ page }) => {
+  // Fulfill every availability lookup for this type with an empty slot list,
+  // simulating a fully booked 14-day window straight from the API.
+  await page.route('**/api/slots*', async (route) => {
+    const url = new URL(route.request().url());
+    if (url.searchParams.get('eventTypeId') !== '1') {
+      await route.continue();
+      return;
+    }
+    await route.fulfill({ json: { eventTypeId: '1', slots: [] } });
+  });
+
+  await page.goto('/');
+  await page.getByRole('button', { name: /30 Min Meeting/ }).click();
+
+  // The friendly empty-state card replaces the slot list.
+  await expect(page.getByText('Fully booked for now')).toBeVisible();
+  await expect(page.getByText(/has no open times in the next 14 days\. Please check back soon!/)).toBeVisible();
+
+  // No bookable time buttons are rendered.
+  await expect(page.locator('button[data-testid]')).toHaveCount(0);
+});
+
 test('owner can create an event type', async ({ page }) => {
   await page.goto('/');
   await page.getByRole('button', { name: 'Owner' }).click();
