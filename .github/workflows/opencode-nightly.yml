@@ -63,3 +63,10 @@ jobs:
             --upload.target="temporary-public-storage" || true
         env:
           LHCI_GITHUB_APP_TOKEN: ${{ secrets.LHCI_GITHUB_APP_TOKEN }}
+      - name: Upload Lighthouse report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lighthouse-report
+          path: .lighthouseci/*.html
+          if-no-files-found: warn
