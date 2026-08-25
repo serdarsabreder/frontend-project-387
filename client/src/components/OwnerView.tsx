@@ -17,6 +17,8 @@ import {
 } from '@/components/ui/table';
 import {
   createEventType,
+  deleteBooking,
+  deleteEventType,
   listBookings,
   listEventTypes,
   type Booking,
@@ -65,6 +67,30 @@ export default function OwnerView() {
       });
       toast.success(`Event type "${created.name}" created.`);
       setForm({ name: '', description: '', durationMinutes: '30' });
+      void reload();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Something went wrong.');
+    }
+  };
+
+  const handleDeleteEventType = async (id: string, name: string) => {
+    if (!window.confirm(`Delete event type "${name}"?`)) return;
+    setError(null);
+    try {
+      await deleteEventType(id);
+      toast.success(`Event type "${name}" deleted.`);
+      void reload();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Something went wrong.');
+    }
+  };
+
+  const handleDeleteBooking = async (id: string) => {
+    if (!window.confirm('Cancel this booking?')) return;
+    setError(null);
+    try {
+      await deleteBooking(id);
+      toast.success('Booking cancelled.');
       void reload();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Something went wrong.');
@@ -131,7 +157,17 @@ export default function OwnerView() {
                   className="flex items-center justify-between gap-3 border-b border-border/60 py-2.5 last:border-b-0"
                 >
                   <span className="text-[15px] font-medium">{et.name}</span>
-                  <Badge variant="secondary">{et.durationMinutes} min</Badge>
+                  <div className="flex items-center gap-2">
+                    <Badge variant="secondary">{et.durationMinutes} min</Badge>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-destructive hover:text-destructive"
+                      onClick={() => void handleDeleteEventType(et.id, et.name)}
+                    >
+                      Delete
+                    </Button>
+                  </div>
                 </li>
               ))}
             </ul>
@@ -154,6 +190,7 @@ export default function OwnerView() {
                   <TableHead>Type</TableHead>
                   <TableHead>Guest</TableHead>
                   <TableHead>Email</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -168,6 +205,16 @@ export default function OwnerView() {
                     <TableCell>{typeName(b.eventTypeId)}</TableCell>
                     <TableCell>{b.name}</TableCell>
                     <TableCell className="text-muted-foreground">{b.email ?? '—'}</TableCell>
+                    <TableCell className="text-right">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-destructive hover:text-destructive"
+                        onClick={() => void handleDeleteBooking(b.id)}
+                      >
+                        Cancel
+                      </Button>
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>

@@ -74,6 +74,25 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/CreateBookingRequest'
+  /bookings/{id}:
+    delete:
+      operationId: BookingsResource_delete
+      description: Cancel (delete) a booking by id.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: 'There is no content to send for this request, but the headers may be useful. '
+        '404':
+          description: The server cannot find the requested resource.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /event-types:
     get:
       operationId: EventTypesResource_list
@@ -111,6 +130,31 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/CreateEventTypeRequest'
+  /event-types/{id}:
+    delete:
+      operationId: EventTypesResource_delete
+      description: Delete an event type by id. Fails with 409 if bookings exist for this type.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: 'There is no content to send for this request, but the headers may be useful. '
+        '404':
+          description: The server cannot find the requested resource.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: The request conflicts with the current state of the server.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /owner:
     get:
       operationId: OwnerResource_get

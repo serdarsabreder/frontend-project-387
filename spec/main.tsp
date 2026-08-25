@@ -168,6 +168,10 @@ namespace CallBooking {
     @body body: Error;
   }
 
+  model Deleted {
+    @statusCode _: 204;
+  }
+
   model CreatedEventType {
     @statusCode _: 201;
     @body body: EventType;
@@ -203,6 +207,11 @@ namespace CallBooking {
     @post
     @doc("Create a new event type. Owner-only action (no auth in this project).")
     create(@body body: CreateEventTypeRequest): CreatedEventType | BadRequest;
+
+    @route("/{id}")
+    @delete
+    @doc("Delete an event type by id. Also removes any bookings for this type.")
+    delete(@path id: string): Deleted | NotFound;
   }
 
   /** Availability: generated slots for an event type inside the 14-day window. */
@@ -242,5 +251,10 @@ namespace CallBooking {
       (the occupancy rule applies across event types).
       """)
     create(@body body: CreateBookingRequest): CreatedBooking | BadRequest | NotFound | Conflict;
+
+    @route("/{id}")
+    @delete
+    @doc("Cancel (delete) a booking by id.")
+    delete(@path id: string): Deleted | NotFound;
   }
 }

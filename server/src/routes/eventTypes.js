@@ -39,6 +39,29 @@ export function eventTypesRouter(db) {
     res.status(201).json(toEventType(row));
   });
 
+  router.delete('/:id', (req, res) => {
+    const { id } = req.params;
+    if (typeof id !== 'string' || !/^\d+$/.test(id)) {
+      return res.status(404).json({ error: 'Event type not found.' });
+    }
+
+    const row = db.prepare('SELECT id FROM event_types WHERE id = ?').get(Number(id));
+    if (!row) {
+      return res.status(404).json({ error: 'Event type not found.' });
+    }
+
+    const hasBookings = db
+      .prepare('SELECT 1 FROM bookings WHERE event_type_id = ? LIMIT 1')
+      .get(Number(id));
+
+    const deleteAll = db.transaction(() => {
+      db.prepare('DELETE FROM bookings WHERE event_type_id = ?').run(Number(id));
+      db.prepare('DELETE FROM event_types WHERE id = ?').run(Number(id));
+    });
+    deleteAll();
+    res.status(204).end();
+  });
+
   return router;
 }
 

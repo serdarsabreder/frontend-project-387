@@ -118,5 +118,20 @@ export function bookingsRouter(db) {
     res.json(bookings);
   });
 
+  router.delete('/:id', (req, res) => {
+    const { id } = req.params;
+    if (typeof id !== 'string' || !/^\d+$/.test(id)) {
+      return res.status(404).json({ error: 'Booking not found.' });
+    }
+
+    const row = db.prepare('SELECT id FROM bookings WHERE id = ?').get(Number(id));
+    if (!row) {
+      return res.status(404).json({ error: 'Booking not found.' });
+    }
+
+    db.prepare('DELETE FROM bookings WHERE id = ?').run(Number(id));
+    res.status(204).end();
+  });
+
   return router;
 }

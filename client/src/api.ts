@@ -76,6 +76,8 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
     throw new Error('Cannot reach the server. Is it running?');
   }
 
+  if (res.status === 204) return undefined as T;
+
   const data = (await res.json().catch(() => null)) as { error?: string } | null;
   if (!res.ok) {
     throw new ApiError(data?.error ?? 'Something went wrong.', res.status);
@@ -106,4 +108,12 @@ export function createBooking(payload: CreateBookingPayload): Promise<Booking> {
 
 export function listBookings(): Promise<Booking[]> {
   return request<Booking[]>('/bookings');
+}
+
+export function deleteBooking(id: string): Promise<void> {
+  return request<void>(`/bookings/${encodeURIComponent(id)}`, { method: 'DELETE' });
+}
+
+export function deleteEventType(id: string): Promise<void> {
+  return request<void>(`/event-types/${encodeURIComponent(id)}`, { method: 'DELETE' });
 }
