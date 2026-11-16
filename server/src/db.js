@@ -32,6 +32,9 @@ export function createDb(dbPath = process.env.DB_PATH || DEFAULT_DB_PATH) {
 
   const db = new Database(dbPath);
   db.pragma('journal_mode = WAL');
+  // Enforce the bookings.event_type_id reference declared below (SQLite leaves
+  // foreign keys off by default).
+  db.pragma('foreign_keys = ON');
   db.exec(`
     CREATE TABLE IF NOT EXISTS event_types (
       id               INTEGER PRIMARY KEY AUTOINCREMENT,

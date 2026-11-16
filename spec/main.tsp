@@ -163,6 +163,11 @@ namespace CallBooking {
     @body body: Error;
   }
 
+  model Unauthorized {
+    @statusCode _: 401;
+    @body body: Error;
+  }
+
   model Conflict {
     @statusCode _: 409;
     @body body: Error;
@@ -205,13 +210,33 @@ namespace CallBooking {
     list(): EventType[];
 
     @post
-    @doc("Create a new event type. Owner-only action (no auth in this project).")
-    create(@body body: CreateEventTypeRequest): CreatedEventType | BadRequest;
+    @doc("""
+      Create a new event type. Owner-only action.
+
+      When the server is configured with an OWNER_TOKEN environment variable,
+      the `x-owner-token` header must match it. Otherwise the endpoint is open
+      (local demo mode).
+      """)
+    create(
+      @header("x-owner-token") ownerToken?: string,
+      @body body: CreateEventTypeRequest,
+    ): CreatedEventType | BadRequest | Unauthorized;
 
     @route("/{id}")
     @delete
-    @doc("Delete an event type by id. Also removes any bookings for this type.")
-    delete(@path id: string): Deleted | NotFound;
+    @doc("""
+      Delete an event type by id.
+
+      Because deleting a type also cancels its bookings, the request is rejected
+      with 409 Conflict while bookings exist unless `force=true` is passed. With
+      `force=true` the type and all of its bookings are removed.
+      """)
+    delete(
+      @path id: string,
+      /** Set to true to also cancel the type's existing bookings. */
+      @query force?: boolean,
+      @header("x-owner-token") ownerToken?: string,
+    ): Deleted | NotFound | Conflict | Unauthorized;
   }
 
   /** Availability: generated slots for an event type inside the 14-day window. */
@@ -239,8 +264,13 @@ namespace CallBooking {
   @route("/bookings")
   interface BookingsResource {
     @get
-    @doc("List upcoming meetings across all event types, ordered by start time.")
-    list(): Booking[];
+    @doc("""
+      List current and upcoming meetings across all event types, ordered by start
+      time. Owner-only; requires `x-owner-token` when OWNER_TOKEN is configured.
+      """)
+    list(
+      @header("x-owner-token") ownerToken?: string,
+    ): Booking[] | Unauthorized;
 
     @post
     @doc("""
@@ -254,7 +284,13 @@ namespace CallBooking {
 
     @route("/{id}")
     @delete
-    @doc("Cancel (delete) a booking by id.")
-    delete(@path id: string): Deleted | NotFound;
+    @doc("""
+      Cancel (delete) a booking by id. Owner-only; requires `x-owner-token` when
+      OWNER_TOKEN is configured.
+      """)
+    delete(
+      @path id: string,
+      @header("x-owner-token") ownerToken?: string,
+    ): Deleted | NotFound | Unauthorized;
   }
 }

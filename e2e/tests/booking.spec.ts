@@ -95,6 +95,99 @@ test('shows an empty state when the API returns no slots', async ({ page }) => {
   await expect(page.locator('button[data-testid]')).toHaveCount(0);
 });
 
+test('owner can cancel an upcoming booking', async ({ page, request }) => {
+  const slotId = await firstAvailableSlot(request);
+  const created = await request.post(`${API}/bookings`, {
+    data: { eventTypeId: '1', slotId, name: 'Cancel Me' },
+  });
+  expect(created.status()).toBe(201);
+
+  page.on('dialog', (dialog) => dialog.accept());
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Owner' }).click();
+
+  const row = page.getByRole('row', { name: /Cancel Me/ });
+  await expect(row).toBeVisible();
+  await row.getByRole('button', { name: 'Cancel' }).click();
+
+  await expect(page.getByText('Booking cancelled.')).toBeVisible();
+  await expect(page.getByRole('row', { name: /Cancel Me/ })).toHaveCount(0);
+});
+
+test('deleting an event type asks before cancelling its bookings', async ({ page, request }) => {
+  const created = await request.post(`${API}/event-types`, {
+    data: { name: 'Temporary Type', durationMinutes: 15 },
+  });
+  expect(created.status()).toBe(201);
+  const eventType = (await created.json()) as { id: string };
+
+  const slotsRes = await request.get(`${API}/slots?eventTypeId=${eventType.id}`);
+  const { slots } = (await slotsRes.json()) as { slots: { id: string; status: string }[] };
+  const freeSlot = slots.find((slot) => slot.status === 'available');
+  expect(freeSlot).toBeTruthy();
+  const booked = await request.post(`${API}/bookings`, {
+    data: { eventTypeId: eventType.id, slotId: freeSlot!.id, name: 'Booked Guest' },
+  });
+  expect(booked.status()).toBe(201);
+
+  const dialogs: string[] = [];
+  page.on('dialog', (dialog) => {
+    dialogs.push(dialog.message());
+    void dialog.accept();
+  });
+
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Owner' }).click();
+
+  const item = page.getByRole('listitem').filter({ hasText: 'Temporary Type' });
+  await expect(item).toBeVisible();
+  await item.getByRole('button', { name: 'Delete' }).click();
+
+  await expect(page.getByText(/Event type "Temporary Type" deleted/)).toBeVisible();
+  await expect(page.getByRole('listitem').filter({ hasText: 'Temporary Type' })).toHaveCount(0);
+  // The second confirmation must call out the bookings that would be cancelled.
+  expect(dialogs.some((message) => /booking/i.test(message))).toBe(true);
+});
+
+test.describe('timezone handling', () => {
+  test.use({ timezoneId: 'Australia/Sydney' });
+
+  test('groups a slot under the guest-local day, not the UTC day', async ({ page }) => {
+    // 18:00 UTC on Nov 12 is 05:00 on Nov 13 in Sydney.
+    await page.route('**/api/slots*', async (route) => {
+      const url = new URL(route.request().url());
+      if (url.searchParams.get('eventTypeId') !== '1') {
+        await route.continue();
+        return;
+      }
+      await route.fulfill({
+        json: {
+          eventTypeId: '1',
+          slots: [
+            {
+              id: '2026-11-12T18:00:00.000Z',
+              eventTypeId: '1',
+              date: '2026-11-12',
+              start: '2026-11-12T18:00:00.000Z',
+              end: '2026-11-12T18:30:00.000Z',
+              status: 'available',
+            },
+          ],
+        },
+      });
+    });
+
+    await page.goto('/');
+    await page.getByRole('button', { name: /30 Min Meeting/ }).click();
+
+    // The day panel and grid must use Nov 13 (local), and the time must be local.
+    await expect(page.getByText('Fri', { exact: true })).toBeVisible();
+    await expect(page.getByText('13', { exact: true }).first()).toBeVisible();
+    await expect(page.getByRole('button', { name: '12', exact: true })).toHaveCount(0);
+    await expect(page.getByText(/05:00/)).toBeVisible();
+  });
+});
+
 test('owner can create an event type', async ({ page }) => {
   await page.goto('/');
   await page.getByRole('button', { name: 'Owner' }).click();

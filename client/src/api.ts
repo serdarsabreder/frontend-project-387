@@ -65,12 +65,37 @@ export class ApiError extends Error {
 // or at a Prism mock server during development (VITE_API_BASE=http://localhost:4010).
 const BASE = (import.meta.env.VITE_API_BASE as string | undefined) ?? '/api';
 
+const OWNER_TOKEN_KEY = 'call-booking-owner-token';
+
+/** Owner token used when the server runs with OWNER_TOKEN configured. */
+export function getOwnerToken(): string {
+  try {
+    return sessionStorage.getItem(OWNER_TOKEN_KEY) ?? '';
+  } catch {
+    return '';
+  }
+}
+
+export function setOwnerToken(token: string): void {
+  try {
+    if (token) sessionStorage.setItem(OWNER_TOKEN_KEY, token);
+    else sessionStorage.removeItem(OWNER_TOKEN_KEY);
+  } catch {
+    // Storage can be unavailable (private mode); the header simply stays empty.
+  }
+}
+
+function ownerHeaders(): Record<string, string> {
+  const token = getOwnerToken();
+  return token ? { 'x-owner-token': token } : {};
+}
+
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   let res: Response;
   try {
     res = await fetch(`${BASE}${path}`, {
-      headers: { 'Content-Type': 'application/json' },
       ...options,
+      headers: { 'Content-Type': 'application/json', ...(options.headers ?? {}) },
     });
   } catch {
     throw new Error('Cannot reach the server. Is it running?');
@@ -94,7 +119,11 @@ export function listEventTypes(): Promise<EventType[]> {
 }
 
 export function createEventType(payload: CreateEventTypePayload): Promise<EventType> {
-  return request<EventType>('/event-types', { method: 'POST', body: JSON.stringify(payload) });
+  return request<EventType>('/event-types', {
+    method: 'POST',
+    headers: ownerHeaders(),
+    body: JSON.stringify(payload),
+  });
 }
 
 export function listSlots(eventTypeId: string, date?: string): Promise<SlotsResponse> {
@@ -107,13 +136,24 @@ export function createBooking(payload: CreateBookingPayload): Promise<Booking> {
 }
 
 export function listBookings(): Promise<Booking[]> {
-  return request<Booking[]>('/bookings');
+  return request<Booking[]>('/bookings', { headers: ownerHeaders() });
 }
 
 export function deleteBooking(id: string): Promise<void> {
-  return request<void>(`/bookings/${encodeURIComponent(id)}`, { method: 'DELETE' });
+  return request<void>(`/bookings/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+    headers: ownerHeaders(),
+  });
 }
 
-export function deleteEventType(id: string): Promise<void> {
-  return request<void>(`/event-types/${encodeURIComponent(id)}`, { method: 'DELETE' });
+/**
+ * Deletes an event type. Without `force` the server rejects the request with 409
+ * while the type still has bookings, so callers must confirm the cascade first.
+ */
+export function deleteEventType(id: string, force = false): Promise<void> {
+  const qs = force ? '?force=true' : '';
+  return request<void>(`/event-types/${encodeURIComponent(id)}${qs}`, {
+    method: 'DELETE',
+    headers: ownerHeaders(),
+  });
 }

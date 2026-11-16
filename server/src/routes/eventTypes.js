@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { requireOwner } from '../auth.js';
 import { getEventType, toEventType } from '../event-types.js';
 
 export function eventTypesRouter(db) {
@@ -11,7 +12,7 @@ export function eventTypesRouter(db) {
     res.json(rows.map(toEventType));
   });
 
-  router.post('/', (req, res) => {
+  router.post('/', requireOwner, (req, res) => {
     const { name, description, durationMinutes } = req.body ?? {};
 
     if (typeof name !== 'string' || name.trim().length === 0) {
@@ -39,7 +40,7 @@ export function eventTypesRouter(db) {
     res.status(201).json(toEventType(row));
   });
 
-  router.delete('/:id', (req, res) => {
+  router.delete('/:id', requireOwner, (req, res) => {
     const { id } = req.params;
     if (typeof id !== 'string' || !/^\d+$/.test(id)) {
       return res.status(404).json({ error: 'Event type not found.' });
@@ -50,9 +51,18 @@ export function eventTypesRouter(db) {
       return res.status(404).json({ error: 'Event type not found.' });
     }
 
-    const hasBookings = db
-      .prepare('SELECT 1 FROM bookings WHERE event_type_id = ? LIMIT 1')
+    const { n: bookingCount } = db
+      .prepare('SELECT COUNT(*) AS n FROM bookings WHERE event_type_id = ?')
       .get(Number(id));
+
+    // Deleting a type cascades to its bookings, so require an explicit
+    // `?force=true` confirmation when meetings would be cancelled.
+    const force = req.query.force === 'true' || req.query.force === '1';
+    if (bookingCount > 0 && !force) {
+      return res.status(409).json({
+        error: `This event type has ${bookingCount} booking(s). Confirm forced deletion to cancel them.`,
+      });
+    }
 
     const deleteAll = db.transaction(() => {
       db.prepare('DELETE FROM bookings WHERE event_type_id = ?').run(Number(id));

@@ -23,8 +23,15 @@ paths:
   /bookings:
     get:
       operationId: BookingsResource_list
-      description: List upcoming meetings across all event types, ordered by start time.
-      parameters: []
+      description: |-
+        List current and upcoming meetings across all event types, ordered by start
+        time. Owner-only; requires `x-owner-token` when OWNER_TOKEN is configured.
+      parameters:
+        - name: x-owner-token
+          in: header
+          required: false
+          schema:
+            type: string
       responses:
         '200':
           description: The request has succeeded.
@@ -34,6 +41,12 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/Booking'
+        '401':
+          description: Access is unauthorized.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
     post:
       operationId: BookingsResource_create
       description: |-
@@ -77,16 +90,29 @@ paths:
   /bookings/{id}:
     delete:
       operationId: BookingsResource_delete
-      description: Cancel (delete) a booking by id.
+      description: |-
+        Cancel (delete) a booking by id. Owner-only; requires `x-owner-token` when
+        OWNER_TOKEN is configured.
       parameters:
         - name: id
           in: path
           required: true
           schema:
             type: string
+        - name: x-owner-token
+          in: header
+          required: false
+          schema:
+            type: string
       responses:
         '204':
           description: 'There is no content to send for this request, but the headers may be useful. '
+        '401':
+          description: Access is unauthorized.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         '404':
           description: The server cannot find the requested resource.
           content:
@@ -109,8 +135,18 @@ paths:
                   $ref: '#/components/schemas/EventType'
     post:
       operationId: EventTypesResource_create
-      description: Create a new event type. Owner-only action (no auth in this project).
-      parameters: []
+      description: |-
+        Create a new event type. Owner-only action.
+
+        When the server is configured with an OWNER_TOKEN environment variable,
+        the `x-owner-token` header must match it. Otherwise the endpoint is open
+        (local demo mode).
+      parameters:
+        - name: x-owner-token
+          in: header
+          required: false
+          schema:
+            type: string
       responses:
         '201':
           description: The request has succeeded and a new resource has been created as a result.
@@ -124,6 +160,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+        '401':
+          description: Access is unauthorized.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
       requestBody:
         required: true
         content:
@@ -133,16 +175,39 @@ paths:
   /event-types/{id}:
     delete:
       operationId: EventTypesResource_delete
-      description: Delete an event type by id. Fails with 409 if bookings exist for this type.
+      description: |-
+        Delete an event type by id.
+
+        Because deleting a type also cancels its bookings, the request is rejected
+        with 409 Conflict while bookings exist unless `force=true` is passed. With
+        `force=true` the type and all of its bookings are removed.
       parameters:
         - name: id
           in: path
           required: true
           schema:
             type: string
+        - name: force
+          in: query
+          required: false
+          description: Set to true to also cancel the type's existing bookings.
+          schema:
+            type: boolean
+          explode: false
+        - name: x-owner-token
+          in: header
+          required: false
+          schema:
+            type: string
       responses:
         '204':
           description: 'There is no content to send for this request, but the headers may be useful. '
+        '401':
+          description: Access is unauthorized.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         '404':
           description: The server cannot find the requested resource.
           content:

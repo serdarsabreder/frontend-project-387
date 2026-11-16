@@ -51,3 +51,29 @@ The admin part publishes a new meeting type, which then appears for guests.
 4. The new type is visible on the guest "Book a call" page.
 
 **Covered by:** `booking.spec.ts › owner can create an event type`
+
+## Scenario 5 — Owner cancels a booking
+
+1. A guest books a slot.
+2. The owner opens the "Owner" view and finds the guest in "Upcoming meetings".
+3. The owner clicks "Cancel" and confirms.
+4. A confirmation toast appears and the meeting disappears from the list.
+
+**Covered by:** `booking.spec.ts › owner can cancel an upcoming booking`
+
+## Scenario 6 — Deleting an event type with bookings
+
+1. The owner deletes an event type that still has bookings.
+2. The first confirmation names the type; because bookings exist, a second
+   confirmation explicitly warns that those meetings will be cancelled.
+3. Accepting both removes the type (and its bookings); dismissing aborts.
+
+**Covered by:** `booking.spec.ts › deleting an event type asks before cancelling its bookings`
+
+## Scenario 7 — Guest-local timezone grouping
+
+The API returns slots as UTC instants, but the calendar must group them by the
+guest's local calendar day and show local times. A slot at 18:00 UTC is 05:00
+the next day in Sydney and must appear under that next day.
+
+**Covered by:** `booking.spec.ts › timezone handling › groups a slot under the guest-local day`

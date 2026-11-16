@@ -16,11 +16,14 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import {
+  ApiError,
   createEventType,
   deleteBooking,
   deleteEventType,
+  getOwnerToken,
   listBookings,
   listEventTypes,
+  setOwnerToken,
   type Booking,
   type EventType,
 } from '../api';
@@ -38,6 +41,9 @@ export default function OwnerView() {
   const [form, setForm] = useState<FormState>({ name: '', description: '', durationMinutes: '30' });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // Owner endpoints require a token only when the server sets OWNER_TOKEN.
+  const [needsToken, setNeedsToken] = useState(false);
+  const [tokenInput, setTokenInput] = useState(() => getOwnerToken());
 
   const reload = useCallback(async () => {
     setError(null);
@@ -45,8 +51,15 @@ export default function OwnerView() {
       const [types, meetings] = await Promise.all([listEventTypes(), listBookings()]);
       setEventTypes(types);
       setBookings(meetings);
+      setNeedsToken(false);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Something went wrong.');
+      if (err instanceof ApiError && err.status === 401) {
+        setNeedsToken(true);
+        // Only complain when a stored/entered token was actually rejected.
+        if (getOwnerToken()) setError('Invalid owner token.');
+      } else {
+        setError(err instanceof Error ? err.message : 'Something went wrong.');
+      }
     } finally {
       setLoading(false);
     }
@@ -73,16 +86,37 @@ export default function OwnerView() {
     }
   };
 
+  const handleSaveToken = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setOwnerToken(tokenInput.trim());
+    setLoading(true);
+    await reload();
+  };
+
   const handleDeleteEventType = async (id: string, name: string) => {
     if (!window.confirm(`Delete event type "${name}"?`)) return;
     setError(null);
     try {
       await deleteEventType(id);
-      toast.success(`Event type "${name}" deleted.`);
-      void reload();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Something went wrong.');
+      // A 409 means the type still has bookings. Make the cascade explicit
+      // instead of silently cancelling guest meetings.
+      if (err instanceof ApiError && err.status === 409) {
+        const message = `${err.message}\n\nDelete the event type and cancel those bookings?`;
+        if (!window.confirm(message)) return;
+        try {
+          await deleteEventType(id, true);
+        } catch (forceErr) {
+          setError(forceErr instanceof Error ? forceErr.message : 'Something went wrong.');
+          return;
+        }
+      } else {
+        setError(err instanceof Error ? err.message : 'Something went wrong.');
+        return;
+      }
     }
+    toast.success(`Event type "${name}" deleted.`);
+    void reload();
   };
 
   const handleDeleteBooking = async (id: string) => {
@@ -111,6 +145,23 @@ export default function OwnerView() {
           <Alert variant="destructive">
             <AlertDescription>{error}</AlertDescription>
           </Alert>
+        )}
+
+        {needsToken && (
+          <form onSubmit={(e) => void handleSaveToken(e)} className="flex flex-wrap items-end gap-2 rounded-lg border border-border/60 p-3">
+            <div className="grid min-w-52 flex-1 gap-1.5">
+              <Label htmlFor="owner-token">Owner access token</Label>
+              <Input
+                id="owner-token"
+                type="password"
+                placeholder="x-owner-token"
+                value={tokenInput}
+                onChange={(e) => setTokenInput(e.target.value)}
+                autoFocus
+              />
+            </div>
+            <Button type="submit">Unlock</Button>
+          </form>
         )}
 
         <section className="flex flex-col gap-3">

@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { requireOwner } from '../auth.js';
 import { getEventType } from '../event-types.js';
 import { dateInWindow, fitsBusinessHours, parseSlotId } from '../slots.js';
 
@@ -94,12 +95,14 @@ export function bookingsRouter(db) {
     }
   });
 
-  router.get('/', (req, res) => {
+  router.get('/', requireOwner, (req, res) => {
+    // `end_time > now` keeps meetings that already started but are still in
+    // progress; completed meetings drop off the list.
     const rows = db
       .prepare(`
         SELECT id, event_type_id, start_time, end_time, name, email, created_at
         FROM bookings
-        WHERE start_time >= ?
+        WHERE end_time > ?
         ORDER BY start_time ASC
       `)
       .all(new Date().toISOString());
@@ -118,7 +121,7 @@ export function bookingsRouter(db) {
     res.json(bookings);
   });
 
-  router.delete('/:id', (req, res) => {
+  router.delete('/:id', requireOwner, (req, res) => {
     const { id } = req.params;
     if (typeof id !== 'string' || !/^\d+$/.test(id)) {
       return res.status(404).json({ error: 'Booking not found.' });

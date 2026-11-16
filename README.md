@@ -11,7 +11,7 @@ OpenAPI specification [`api-contract.yaml`](api-contract.yaml) is generated from
 it with `npm run generate` in `spec/`.
 
 - **Contract:** TypeSpec (`spec/`) → OpenAPI (`api-contract.yaml`)
-- **Backend:** Node.js 20 / Express / better-sqlite3 (`server/`)
+- **Backend:** Node.js 24 / Express / better-sqlite3 (`server/`)
 - **Frontend:** TypeScript + React + Vite, shadcn/ui, Tailwind CSS (`client/`)
 
 ## Contract
@@ -111,10 +111,21 @@ This repository integrates [OpenCode](https://opencode.ai) as a team member via 
 
 ```bash
 docker build -t call-booking .
-docker run -p 3000:3000 -e PORT=3000 call-booking
+docker run -p 3000:3000 -e PORT=3000 -v call-booking-data:/app/data call-booking
 ```
 
-The server reads `PORT` from the environment and binds to `0.0.0.0`.
+The server reads `PORT` from the environment and binds to `0.0.0.0`. SQLite is
+stored in `/app/data`, which is declared as a volume — mount it (as above) to
+keep bookings across container restarts. The image runs as the unprivileged
+`node` user.
+
+Set `OWNER_TOKEN` to require the matching `x-owner-token` header on owner
+endpoints (creating/deleting event types, listing/cancelling bookings). When it
+is unset, the demo stays open:
+
+```bash
+docker run -p 3000:3000 -e OWNER_TOKEN=change-me -v call-booking-data:/app/data call-booking
+```
 
 ## API
 
@@ -123,9 +134,14 @@ The server reads `PORT` from the environment and binds to `0.0.0.0`.
 | `GET /api/owner` | Default calendar owner profile (admin part) |
 | `GET /api/event-types` | Published event types (name, description, duration) |
 | `POST /api/event-types` | Owner creates an event type |
+| `DELETE /api/event-types/:id` | Owner deletes a type; `409` while bookings exist unless `?force=true` |
 | `GET /api/slots?eventTypeId=&date=` | 30-minute-grid slots for a type, 14-day window, booked ones flagged |
 | `POST /api/bookings` | Book `{eventTypeId, slotId, name, email?}`; `409` on overlap |
-| `GET /api/bookings` | Upcoming meetings across all types, oldest first |
+| `GET /api/bookings` | Current and upcoming meetings across all types, oldest first |
+| `DELETE /api/bookings/:id` | Owner cancels a booking |
+
+Owner endpoints accept an optional `x-owner-token` header; they only require it
+when the server runs with `OWNER_TOKEN` set.
 
 ### Hexlet tests and linter status:
 [![Actions Status](https://github.com/serdarsabreder/frontend-project-387/actions/workflows/hexlet-check.yml/badge.svg)](https://github.com/serdarsabreder/frontend-project-387/actions)

@@ -282,6 +282,138 @@ test('POST /api/bookings returns 404 for unknown event type or unknown slot', as
   assert.equal(outside.status, 404);
 });
 
+test('GET /api/slots rejects dates outside the 14-day booking window', async () => {
+  const { body: types } = await getJson(`${ctx.base}/api/event-types`);
+  const eventType = types[0];
+
+  for (const date of ['2099-01-01', '2000-01-01']) {
+    const { status, body } = await getJson(
+      `${ctx.base}/api/slots?eventTypeId=${eventType.id}&date=${date}`,
+    );
+    assert.equal(status, 400, `expected 400 for ${date}`);
+    assert.match(body.error, /14-day booking window/);
+  }
+});
+
+test('DELETE /api/bookings/:id cancels the booking', async () => {
+  const { body: types } = await getJson(`${ctx.base}/api/event-types`);
+  const eventType = types.find((type) => type.durationMinutes === 30);
+  const date = futureDate();
+  const { body: slots } = await getJson(
+    `${ctx.base}/api/slots?eventTypeId=${eventType.id}&date=${date}`,
+  );
+
+  const { body: booking } = await postJson(`${ctx.base}/api/bookings`, {
+    eventTypeId: eventType.id,
+    slotId: slots.slots[0].id,
+    name: 'Ada',
+  });
+
+  const deleted = await fetch(`${ctx.base}/api/bookings/${booking.id}`, { method: 'DELETE' });
+  assert.equal(deleted.status, 204);
+
+  const { body: list } = await getJson(`${ctx.base}/api/bookings`);
+  assert.equal(list.length, 0);
+
+  const again = await fetch(`${ctx.base}/api/bookings/${booking.id}`, { method: 'DELETE' });
+  assert.equal(again.status, 404);
+
+  const malformed = await fetch(`${ctx.base}/api/bookings/not-a-number`, { method: 'DELETE' });
+  assert.equal(malformed.status, 404);
+});
+
+test('DELETE /api/event-types/:id requires force when bookings exist', async () => {
+  const created = await postJson(`${ctx.base}/api/event-types`, {
+    name: 'Deletable Type',
+    durationMinutes: 15,
+  });
+  assert.equal(created.status, 201);
+  const eventType = created.body;
+
+  const date = futureDate();
+  const { body: slots } = await getJson(
+    `${ctx.base}/api/slots?eventTypeId=${eventType.id}&date=${date}`,
+  );
+  const booked = await postJson(`${ctx.base}/api/bookings`, {
+    eventTypeId: eventType.id,
+    slotId: slots.slots[0].id,
+    name: 'Ada',
+  });
+  assert.equal(booked.status, 201);
+
+  // Without force the deletion is refused and nothing is removed.
+  const blocked = await fetch(`${ctx.base}/api/event-types/${eventType.id}`, { method: 'DELETE' });
+  assert.equal(blocked.status, 409);
+  const blockedBody = await blocked.json();
+  assert.match(blockedBody.error, /booking/);
+
+  const { body: stillThere } = await getJson(`${ctx.base}/api/event-types`);
+  assert.ok(stillThere.some((type) => type.id === eventType.id));
+
+  // With force=true the type and its bookings are removed.
+  const forced = await fetch(`${ctx.base}/api/event-types/${eventType.id}?force=true`, {
+    method: 'DELETE',
+  });
+  assert.equal(forced.status, 204);
+
+  const { body: after } = await getJson(`${ctx.base}/api/event-types`);
+  assert.ok(!after.some((type) => type.id === eventType.id));
+  const { body: bookingsAfter } = await getJson(`${ctx.base}/api/bookings`);
+  assert.ok(!bookingsAfter.some((booking) => booking.eventTypeId === eventType.id));
+
+  const missing = await fetch(`${ctx.base}/api/event-types/99999?force=true`, { method: 'DELETE' });
+  assert.equal(missing.status, 404);
+});
+
+test('owner endpoints require x-owner-token when OWNER_TOKEN is set', async () => {
+  process.env.OWNER_TOKEN = 's3cret';
+  try {
+    const anonymousCreate = await postJson(`${ctx.base}/api/event-types`, {
+      name: 'Nope',
+      durationMinutes: 30,
+    });
+    assert.equal(anonymousCreate.status, 401);
+
+    const anonymousBookings = await fetch(`${ctx.base}/api/bookings`);
+    assert.equal(anonymousBookings.status, 401);
+
+    const authorizedCreate = await fetch(`${ctx.base}/api/event-types`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-owner-token': 's3cret' },
+      body: JSON.stringify({ name: 'Allowed Type', durationMinutes: 30 }),
+    });
+    assert.equal(authorizedCreate.status, 201);
+
+    const authorizedBookings = await fetch(`${ctx.base}/api/bookings`, {
+      headers: { 'x-owner-token': 's3cret' },
+    });
+    assert.equal(authorizedBookings.status, 200);
+  } finally {
+    delete process.env.OWNER_TOKEN;
+  }
+});
+
+test('GET /api/bookings keeps meetings that are still in progress', async () => {
+  const now = Date.now();
+  ctx.db
+    .prepare(`
+      INSERT INTO bookings (event_type_id, start_time, end_time, name, email, created_at)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `)
+    .run(
+      1,
+      new Date(now - 10 * 60 * 1000).toISOString(),
+      new Date(now + 20 * 60 * 1000).toISOString(),
+      'In Progress',
+      null,
+      new Date(now).toISOString(),
+    );
+
+  const { body } = await getJson(`${ctx.base}/api/bookings`);
+  assert.equal(body.length, 1);
+  assert.equal(body[0].name, 'In Progress');
+});
+
 test('GET /api/bookings only lists upcoming meetings', async () => {
   const { body: types } = await getJson(`${ctx.base}/api/event-types`);
   const eventType = types[0];
