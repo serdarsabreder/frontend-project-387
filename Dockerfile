@@ -5,11 +5,12 @@
 #   Stage 3: runtime image with the server + built client only
 #
 # The server reads PORT from the environment and binds to 0.0.0.0, so the
-# same image runs unchanged on a host or in the container.
+# same image runs unchanged on a host or in the container. SQLite lives in
+# /app/data (declared as a volume) so bookings survive container restarts.
 # =============================================================================
 
 # --- Stage 1: client build ---------------------------------------------------
-FROM node:20-bookworm-slim AS client-build
+FROM node:24-bookworm-slim AS client-build
 WORKDIR /app/client
 COPY client/package.json client/package-lock.json ./
 RUN npm ci
@@ -17,20 +18,28 @@ COPY client/ ./
 RUN npm run build
 
 # --- Stage 2: server production dependencies ---------------------------------
-FROM node:20-bookworm-slim AS server-deps
+FROM node:24-bookworm-slim AS server-deps
 WORKDIR /app/server
 COPY server/package.json server/package-lock.json ./
 RUN npm ci --omit=dev
 
 # --- Stage 3: runtime ---------------------------------------------------------
-FROM node:20-bookworm-slim
+FROM node:24-bookworm-slim
 ENV NODE_ENV=production
+ENV PORT=3000
+ENV DB_PATH=/app/data/call-booking.db
 WORKDIR /app
 
 COPY --from=server-deps /app/server/node_modules ./server/node_modules
 COPY server/package.json ./server/
 COPY server/src ./server/src
 COPY --from=client-build /app/client/dist ./client/dist
+
+# The process runs as the unprivileged `node` user and only /app/data is
+# writable; mounting a volume there preserves the SQLite database.
+RUN mkdir -p /app/data && chown -R node:node /app/data
+USER node
+VOLUME ["/app/data"]
 
 EXPOSE 3000
 
