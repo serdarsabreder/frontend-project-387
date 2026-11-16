@@ -42,6 +42,24 @@ jobs:
         run: npm run build
         working-directory: client
 
+  contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: spec/package-lock.json
+      - name: Install TypeSpec
+        run: npm ci
+        working-directory: spec
+      - name: Regenerate OpenAPI contract
+        run: npm run generate
+        working-directory: spec
+      - name: Fail when api-contract.yaml is out of sync
+        run: git diff --exit-code -- api-contract.yaml
+
   e2e:
     runs-on: ubuntu-latest
     needs: [server-tests, client-build]

@@ -6,6 +6,8 @@ on:
 
 jobs:
   triage:
+    # Never triage bot-authored issues (avoids response loops).
+    if: github.event.issue.user.type != 'Bot'
     runs-on: ubuntu-latest
     permissions:
       id-token: write

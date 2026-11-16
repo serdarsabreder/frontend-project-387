@@ -6,7 +6,11 @@ on:
 
 jobs:
   review:
-    if: github.actor != 'github-actions[bot]'
+    # Skip the agent's own updates and any other bot (dependabot, etc.) so a
+    # review cannot trigger another review indefinitely.
+    if: |
+      !contains(github.actor, '[bot]') &&
+      github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     permissions:
       id-token: write

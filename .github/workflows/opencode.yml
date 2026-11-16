@@ -8,9 +8,19 @@ on:
 
 jobs:
   opencode:
+    # Only trusted humans may drive the agent, and bots must never trigger it
+    # (prevents self-reply loops). The slash command has to start the comment so
+    # a URL or a word like "/october" cannot invoke the workflow.
     if: |
-      contains(github.event.comment.body, '/oc') ||
-      contains(github.event.comment.body, '/opencode')
+      github.event.comment.user.type != 'Bot' &&
+      !contains(github.actor, '[bot]') &&
+      (github.event.comment.author_association == 'OWNER' ||
+       github.event.comment.author_association == 'MEMBER' ||
+       github.event.comment.author_association == 'COLLABORATOR') &&
+      (startsWith(github.event.comment.body, '/oc ') ||
+       startsWith(github.event.comment.body, '/opencode ') ||
+       github.event.comment.body == '/oc' ||
+       github.event.comment.body == '/opencode')
     runs-on: ubuntu-latest
     permissions:
       id-token: write

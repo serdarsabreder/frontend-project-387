@@ -55,12 +55,15 @@ jobs:
         run: npm ci && npm run build
         working-directory: client
       - name: Run Lighthouse audit
+        # No `|| true`: a regression in the recommended preset must fail the
+        # nightly run. `staticDistDir` makes LHCI serve the built client itself,
+        # so the URL is a path on that static server rather than port 3000.
         run: |
           lhci autorun \
-            --collect.url="http://localhost:3000" \
+            --collect.url="http://localhost/index.html" \
             --collect.staticDistDir="./client/dist" \
             --assert.preset="lighthouse:recommended" \
-            --upload.target="temporary-public-storage" || true
+            --upload.target="temporary-public-storage"
         env:
           LHCI_GITHUB_APP_TOKEN: ${{ secrets.LHCI_GITHUB_APP_TOKEN }}
       - name: Upload Lighthouse report
@@ -69,5 +72,5 @@ jobs:
         with:
           name: lighthouse-report
           path: .lighthouseci/*.html
-          if-no-files-found: error
+          if-no-files-found: warn
           include-hidden-files: true
